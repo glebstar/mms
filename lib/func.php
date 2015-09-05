@@ -1,7 +1,6 @@
 <?php
 
 require_once ROOT_DIR . '/lib/Db.php';
-require_once ROOT_DIR . '/lib/simple_html_dom.php';
 
 function getReplays($s) {
     $res = '';   
@@ -17,33 +16,55 @@ function getReplays($s) {
     return $res;
 }
 
-function parseNews() {
-    // очистить таблицу
-    Db::deleteFromTable('article');
+function getHtmlCurl($url) {
+    $curl = curl_init($url);
+    curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($curl, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($curl, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US) AppleWebKit/534.10 (KHTML, like Gecko) Chrome/8.0.552.224 Safari/534.10');
+    $html = curl_exec($curl);
+    curl_close($curl);
     
-    $data = array();
+    return $html;
+}
+
+function parseNews() {
+    Db::deleteFromTable('article');
     
     $max = 10;
     $i = 0;
     
-    $html = file_get_html('http://www.rbc.ru/');
+    $html = getHtmlCurl('http://www.rbc.ru/');
     
-    foreach ($html->find('.news-main-feed__item') as $a) {
-        $data['title'] = base64_encode($a->find('.news-main-feed__item__title', 0)->innertext);
-        $articleHtml = file_get_html( $a->attr['href'] );
+    libxml_use_internal_errors(true);
+    $dom = new DOMDocument();
+    $dom->loadHTML($html);
+    $xpath = new DOMXPath($dom);
+    
+    
+    $rows = $xpath->query("//a[contains(@class, 'news-main-feed__item')]");
+    
+    foreach ($rows as $_r) {
+        $data = array();
+
+        $q = $xpath->query('.//span[@class="news-main-feed__item__title"]', $_r);
+        $data['title'] = base64_encode(trim($q->item(0)->nodeValue));
         
-        if (!$articleHtml->find('.article__overview__text')) {
-            continue;;
-        }
+        $html2 = getHtmlCurl($_r->getAttribute('href'));
+        $dom2 = new DOMDocument();
+        $dom2->loadHTML($html2);
+        $xpath2 = new DOMXPath($dom2);
         
-        $data['overview'] = base64_encode($articleHtml->find('.article__overview__text', 0)->innertext);
+        $q = $xpath2->query('//div[@class="article__overview__text"]');       
+        $data['overview'] = base64_encode(trim($q->item(0)->nodeValue));
         
         $data['image'] = '';
-        if ( $articleHtml->find('.article__main-image__image') ) {
-            $data['image'] = $articleHtml->find('.article__main-image__image', 0)->attr['src'];
+        $q = $xpath2->query('//img[@class="article__main-image__image"]');
+        if ($q->length > 0) {
+            $data['image'] = $q->item(0)->getAttribute('src');
         }
         
-        $data['text'] = base64_encode($articleHtml->find('.article__text', 0)->innertext);
+        $q = $xpath2->query('//div[@class="article__text"]');
+        $data['text'] = base64_encode(trim($q->item(0)->nodeValue));
         
         Db::insertArray('article', $data);
         
@@ -52,6 +73,8 @@ function parseNews() {
             break;
         }
     }
+    
+    
 }
 
 function getNews() {

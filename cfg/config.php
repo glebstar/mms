@@ -8,8 +8,7 @@ $mainCfg = array(
         'password'  => 'mms'
     ),
     'error_level'     => E_ALL,
-    'display_errors'  => 'Off',
-    'script_version'  => 1
+    'display_errors'  => 'Off'
 );
 
 if (file_exists(ROOT_DIR . '/cfg/config.local.php')) {
